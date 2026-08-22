@@ -1,8 +1,6 @@
-<p align="center" style="margin:0; font-family:ui-monospace,SFMono-Regular,Consolas,monospace; line-height:1.2">████╗ ████╗ ████╗</p>
-<p align="center" style="margin:0; font-family:ui-monospace,SFMono-Regular,Consolas,monospace; line-height:1.2">██╔═╝ ██╔═╝ ██╔═╝</p>
-<p align="center" style="margin:0; font-family:ui-monospace,SFMono-Regular,Consolas,monospace; line-height:1.2">████╗ ████╗ ████╗</p>
-<p align="center" style="margin:0; font-family:ui-monospace,SFMono-Regular,Consolas,monospace; line-height:1.2">╚═██╗ ╚═██╗ ╚═██╗</p>
-<p align="center" style="margin:0; font-family:ui-monospace,SFMono-Regular,Consolas,monospace; line-height:1.2">████╝ ████╝ ████╝</p>
+<p align="center">
+  <img src="docs/logo.png" alt="Rust RSS Reader logo" width="220"/>
+</p>
 <h3 align="center">Rust RSS Reader</h3>
 <p align="center">用 Rust 复刻 <a href="https://github.com/yang991178/fluent-reader">Fluent Reader</a> 的 RSS 阅读器 · A Fluent Reader-inspired RSS reader written in Rust</p>
 <p align="center">
