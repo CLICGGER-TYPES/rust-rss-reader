@@ -62,6 +62,7 @@ let feeds: MockFeed[] = [
   { id: 1, folder_id: 1, title: "Hacker News", url: "https://hnrss.org/frontpage", site_url: "https://news.ycombinator.com", description: null, favicon_url: null, last_updated: null, error: null, refresh_interval: null, use_proxy: false, default_original: false },
   { id: 2, folder_id: 1, title: "Rust Blog", url: "https://blog.rust-lang.org/feed.xml", site_url: "https://blog.rust-lang.org", description: null, favicon_url: null, last_updated: null, error: null, refresh_interval: null, use_proxy: false, default_original: false },
   { id: 3, folder_id: null, title: "BBC News", url: "https://feeds.bbci.co.uk/news/rss.xml", site_url: "https://www.bbc.com/news", description: null, favicon_url: null, last_updated: null, error: null, refresh_interval: null, use_proxy: false, default_original: false },
+  { id: 4, folder_id: null, title: "机核网", url: "https://www.gcores.com/rss", site_url: "https://www.gcores.com", description: null, favicon_url: null, last_updated: null, error: null, refresh_interval: null, use_proxy: false, default_original: false },
 ];
 let folders = [{ id: 1, name: "Tech", position: 0 }];
 let articles: MockArticle[] = [
@@ -81,6 +82,14 @@ let articles: MockArticle[] = [
     title: "5月音乐推荐（含播放器）",
     url: "https://example.com/media",
     content: `<p>文章正文，含防盗链图片和音乐播放器。</p><img src="https://cdn.sspai.com/2026/08/14/example.jpg" data-original="https://cdn.sspai.com/2026/08/14/example-orig.jpg"/><p>下面是一个网易云播放器 iframe：</p><iframe src="https://music.163.com/outchain/player?type=2&id=12345&auto=0" width="330" height="86"></iframe><p>以及一个直链音频：</p><audio src="https://cdn.example.com/song.mp3" controls></audio>`,
+  }),
+  mkArticle({
+    feed_id: 4,
+    title: "《影之刃零》试玩体验：硬核武侠动作的另一种解法",
+    url: "https://example.com/gcores/1",
+    author: "白广大",
+    published_at: new Date().toISOString(),
+    content: `<p>在今年的展会现场，《影之刃零》终于向玩家完整展示了它的战斗系统。作为一款强调"见招拆招"的武侠动作游戏，它的每一次拼刀、每一记弹反，都在试图回答一个问题：我们记忆里那些港式武侠电影的打斗，究竟能不能被做成可操作的游戏？</p><img src="https://image.gcores.com/demo-01-1600-900.jpg"/><p>开场不到十分钟，制作组就把玩家丢进了一场一对多的巷战。刀光、残影、敌人的惨叫混在一起，屏幕上几乎没有一秒是静止的。与传统动作游戏不同，本作的体力条并不限制攻击频率，而是鼓励你在一轮连招的末尾通过"架势互换"继续压制。</p><h2 id="h2-1">拼刀背后的博弈</h2><p>《影之刃零》的核心是"破招"系统。敌人出招瞬间，如果你能准确把握时机按下防御，就能进入短暂的子弹时间并触发高伤害反击。这种设计并不新鲜，但它与武侠题材的结合却产生了奇妙的化学反应——你不再是躲在盾牌后的骑士，而是要在刀光剑影中读出对手的意图。</p><blockquote>"武侠的精髓从来不是硬碰硬，而是在对方出招前的一刹那看穿破绽。"——制作人访谈</blockquote><h2 id="h2-2">美术与氛围</h2><p>游戏采用虚幻引擎 5 的 Lumen 全局光照，水墨风格的场景在昼夜交替时会呈现出完全不同的气质。雨夜的城楼、风沙中的驿站、大雪封山的古道——每一个场景都像是一幅会动的山水画。</p><img src="https://image.gcores.com/demo-02-1600-900.jpg"/><p>角色设计上，主角的造型参考了上世纪八十年代香港武侠片的美学，布衣、斗笠、长剑，配以克制的色彩，反而比花哨的"时装"更有辨识度。</p><h2 id="h2-3">目前的短板</h2><p>当然，试玩版本也存在一些遗憾：</p><ul><li>敌人的 AI 在低难度下略显迟钝，精英怪的读招行为还有优化空间</li><li>部分场景的加载时间偏长，读档后的演出衔接有些生硬</li><li>地图指引不够明确，容易在开阔区域迷失方向</li></ul><p>但这些都属于打磨阶段常见的问题。真正让人期待的是，制作组已经证明了自己有能力把"武侠"这个被反复消费的题材，做出属于自己的节奏。</p><h2 id="h2-4">结语</h2><p>如果你喜欢《只狼》式的战斗博弈，或者只是单纯怀念香港动作片里的刀光剑影，《影之刃零》都值得放入你的愿望单。它不完美，但它确实在认真地做一件难做的事——让武侠游戏重新变得"见招拆招"。</p>`,
   }),
 ];
 let settings = new Map<string, string>([["theme", "light"]]);
