@@ -1,0 +1,23 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/rss-core",
+    "apps/tui",
+    "apps/desktop",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[workspace.dependencies]
+rss-core = { path = "crates/rss-core" }
+serde = "1.0.229"
+serde_json = "1.0"
+thiserror = "2.0.20"
+dirs = "6.0.0"
+chrono = { version = "0.4.45", features = ["serde"] }
+
+[profile.release]
+opt-level = 2

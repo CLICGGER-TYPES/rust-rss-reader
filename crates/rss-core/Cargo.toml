@@ -1,0 +1,26 @@
+[package]
+name = "rss-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+dirs = { workspace = true }
+chrono = { workspace = true }
+
+reqwest = { version = "0.13.4", features = ["blocking", "rustls", "gzip", "brotli", "deflate", "stream", "socks"], default-features = false }
+feed-rs = "2.4.0"
+rusqlite = { version = "0.40.2", features = ["bundled"] }
+quick-xml = "0.41.0"
+readability = "0.3.0"
+scraper = "0.27.0"
+html2md = "0.2.15"
+url = "2.5.8"
+base64 = "0.22"
+tracing = "0.1"
+
+[dev-dependencies]
+tempfile = "3"

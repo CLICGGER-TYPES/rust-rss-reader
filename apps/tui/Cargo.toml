@@ -1,0 +1,17 @@
+[package]
+name = "rss-tui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "rss-reader"
+path = "src/main.rs"
+
+[dependencies]
+rss-core = { workspace = true }
+ratatui = "0.30.2"
+crossterm = "0.29.0"
+anyhow = "1"
+dirs = { workspace = true }
+chrono = { workspace = true }
