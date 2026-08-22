@@ -1,4 +1,4 @@
-<p align="center"><pre>
+<p align="center"><pre style="text-align:center">
 ████╗ ████╗ ████╗
 ██╔═╝ ██╔═╝ ██╔═╝
 ████╗ ████╗ ████╗
