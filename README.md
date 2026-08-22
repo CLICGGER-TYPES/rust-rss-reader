@@ -38,24 +38,13 @@ Desktop client is feature-complete and actively iterated; the terminal (TUI) cli
 **文章**
 - 已读 / 未读 / 星标，搜索（标题 / 摘要 / 正文），排序（时间 / 未读 / 星标 / 标题），分页加载
 - 四种视图：列表 / 紧凑 / 卡片 / 杂志
-- 打开文章自动抓取全文（readability + 正文容器提取 + 站点适配器），抓取期间阅读区转圈等待，就绪后一次性呈现
-
-**抓取与反爬**
-- 浏览器 UA + 同域 Referer（应对 CSDN 等反爬站）
-- 图片代理：防盗链 Referer、相对路径补全、磁盘缓存
-- 站点适配器注册表：新增站点 = 一个文件 + 一行注册（已内置 gcores）
-- 增量刷新（ETag / Last-Modified / 304）
+- 打开文章自动抓取全文，抓取期间阅读区转圈等待，就绪后一次性呈现
 
 **阅读体验**
 - 字号调节，Markdown / HTML / PDF / TXT 导出，复制 Markdown
-- 应用内打开原文（iframe 内嵌 / 独立窗口，X-Frame-Options 检测）
+- 应用内打开原文（iframe 内嵌 / 独立窗口）
 - 媒体播放弹窗：YouTube / B 站 / 网易云 / Apple Music / Spotify 等
 - 暗黑 / 浅色 / 跟随系统主题，中文 / English 界面
-
-**桌面端工程**
-- 自定义无边框标题栏（拖拽 + 边缘 resize）
-- 代理设置（http / https / socks5），数据目录迁移，一键清缓存
-- 统一日志系统：前后端日志写入同一份 `logs/app.log`（`RUST_LOG` 可调级别），每个命令记录参数与结果，方便排障
 
 ### 技术栈
 
@@ -88,23 +77,47 @@ rss-reader/                  # cargo workspace
 
 ### 构建与运行
 
+**前置依赖**
+- Rust toolchain（含 `cargo`）
+- Node.js 18+（含 `npm`，仅桌面端前端需要）
+
+**桌面端（不用脚本，分步命令）**
+
 ```bash
-# 桌面端（含前端构建）
-./run-desktop.sh
-# 或分步
-npm --prefix apps/desktop/ui run build
+# 1. 构建前端（首次或前端有改动时需要；产物在 apps/desktop/ui/dist）
+cd apps/desktop/ui
+npm install          # 首次安装前端依赖
+npm run build
+cd ../..
+
+# 2. 编译并运行桌面端（custom-protocol 内嵌前端，无需额外 dev server）
 cargo run -p rss-desktop
+```
 
-# 终端版（仍在完善）
-cargo run -p rss-tui        # 快捷键：?
+> 想用脚本的话，`./run-desktop.sh` 就是上面几步的等价封装。
+> 运行已编译的 release 版直接：`./target/release/rss-desktop`。
 
-# 测试
+**终端版（仍在完善）**
+
+```bash
+cargo run -p rss-tui    # 快捷键：?
+```
+
+**测试**
+
+```bash
 cargo test --workspace
 # 真实网络抓取集成测试（默认忽略，手动跑）
 cargo test -p rss-core network_ -- --ignored --nocapture
 ```
 
-打包 deb：`cd apps/desktop && ui/node_modules/.bin/tauri build --bundles deb`
+**打包 deb**
+
+```bash
+cd apps/desktop
+ui/node_modules/.bin/tauri build --bundles deb
+# 产物：target/release/bundle/deb/Rust RSS Reader_0.1.0_amd64.deb
+```
 
 ### 数据目录
 
@@ -134,14 +147,9 @@ An RSS reader with a shared Rust core and two frontends (Tauri desktop + ratatui
 - Subscription management: add/remove feeds, folder grouping, rename, URL edit, per-feed refresh interval / proxy / default-open-original
 - OPML 2.0 import (recursive + error report) / export
 - Articles: read/unread/star, search, sorting, paging, four view modes (list / compact / card / magazine)
-- Auto-fetch full text on open (readability + content container + site adapters); reader area spins until content is ready, then renders once
-- Anti-bot: browser UA + same-origin Referer; image proxy with anti-hotlink Referer, relative-path resolution, disk cache
-- Site adapter registry: add a site = one file + one registration line (gcores built-in)
-- Incremental refresh via ETag / Last-Modified / 304
-- Reader: font-size, export Markdown/HTML/PDF/TXT, copy, in-app original view (iframe / separate window, X-Frame-Options detection), media dialog (YouTube / Bilibili / NetEase / Apple Music / Spotify...)
+- Auto-fetch full text on open; reader area spins until content is ready, then renders once
+- Reader: font-size, export Markdown/HTML/PDF/TXT, copy, in-app original view (iframe / separate window), media dialog (YouTube / Bilibili / NetEase / Apple Music / Spotify...)
 - Dark / light / system theme, zh-CN / en UI
-- Custom borderless title bar (drag + edge resize), proxy (http/https/socks5), data-dir migration, cache clear
-- Unified logging: frontend + backend write to `logs/app.log` (`RUST_LOG` adjustable), every command logs args & result
 
 ### Tech Stack
 
@@ -152,11 +160,46 @@ TUI: ratatui, crossterm
 
 ### Build & Run
 
+**Prerequisites**
+- Rust toolchain (with `cargo`)
+- Node.js 18+ (with `npm`, only needed for the desktop frontend)
+
+**Desktop (step-by-step, no script)**
+
 ```bash
-./run-desktop.sh                       # desktop (builds frontend + runs)
-cargo run -p rss-tui                   # terminal (WIP)
-cargo test --workspace                 # tests
-cd apps/desktop && ui/node_modules/.bin/tauri build --bundles deb
+# 1. Build the frontend (first time, or after frontend changes)
+cd apps/desktop/ui
+npm install          # install frontend deps (first time)
+npm run build
+cd ../..
+
+# 2. Compile & run the desktop app (frontend is embedded via custom-protocol)
+cargo run -p rss-desktop
+```
+
+> `./run-desktop.sh` is an equivalent wrapper for the steps above.
+> To run an already-compiled release binary directly: `./target/release/rss-desktop`.
+
+**Terminal (WIP)**
+
+```bash
+cargo run -p rss-tui    # press ? for help
+```
+
+**Tests**
+
+```bash
+cargo test --workspace
+# real-network integration tests (ignored by default)
+cargo test -p rss-core network_ -- --ignored --nocapture
+```
+
+**Build deb**
+
+```bash
+cd apps/desktop
+ui/node_modules/.bin/tauri build --bundles deb
+# artifact: target/release/bundle/deb/Rust RSS Reader_0.1.0_amd64.deb
 ```
 
 ### Data
