@@ -1,7 +1,19 @@
-# Rust RSS Reader
-
-> 用 Rust 复刻 [Fluent Reader](https://github.com/yang991178/fluent-reader) 的 RSS 阅读器。
-> A Fluent Reader-inspired RSS reader written in Rust.
+<p align="center"><pre>
+████╗ ████╗ ████╗
+██╔═╝ ██╔═╝ ██╔═╝
+████╗ ████╗ ████╗
+╚═██╗ ╚═██╗ ╚═██╗
+████╝ ████╝ ████╝
+</pre></p>
+<h3 align="center">Rust RSS Reader</h3>
+<p align="center">用 Rust 复刻 <a href="https://github.com/yang991178/fluent-reader">Fluent Reader</a> 的 RSS 阅读器 · A Fluent Reader-inspired RSS reader written in Rust</p>
+<p align="center">
+  <img alt="language" src="https://img.shields.io/badge/language-Rust-orange" />
+  <img alt="license" src="https://img.shields.io/badge/license-MIT-blue" />
+  <img alt="desktop" src="https://img.shields.io/badge/desktop-Tauri%20v2-24c8db" />
+  <img alt="terminal" src="https://img.shields.io/badge/terminal-ratatui-24c8db" />
+</p>
+<hr />
 
 **状态 / Status**：桌面端功能较完整，持续迭代中；终端版（TUI）仍在完善，功能落后于桌面端。
 Desktop client is feature-complete and actively iterated; the terminal (TUI) client is still WIP and lags behind.
