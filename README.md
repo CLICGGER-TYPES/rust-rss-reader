@@ -77,38 +77,28 @@ rss-reader/                  # cargo workspace
 
 ### 构建与运行
 
-**前置依赖**
-- Rust toolchain（含 `cargo`）
-- Node.js 18+（含 `npm`，仅桌面端前端需要）
+前置依赖：Rust toolchain、Node.js 18+（桌面端前端）
 
-**桌面端（不用脚本，分步命令）**
+**桌面端**
 
 ```bash
-# 1. 构建前端（首次或前端有改动时需要；产物在 apps/desktop/ui/dist）
 cd apps/desktop/ui
-npm install          # 首次安装前端依赖
+npm install
 npm run build
 cd ../..
-
-# 2. 编译并运行桌面端（custom-protocol 内嵌前端，无需额外 dev server）
 cargo run -p rss-desktop
 ```
 
-> 想用脚本的话，`./run-desktop.sh` 就是上面几步的等价封装。
-> 运行已编译的 release 版直接：`./target/release/rss-desktop`。
-
-**终端版（仍在完善）**
+**终端版**
 
 ```bash
-cargo run -p rss-tui    # 快捷键：?
+cargo run -p rss-tui
 ```
 
 **测试**
 
 ```bash
 cargo test --workspace
-# 真实网络抓取集成测试（默认忽略，手动跑）
-cargo test -p rss-core network_ -- --ignored --nocapture
 ```
 
 **打包 deb**
@@ -116,7 +106,6 @@ cargo test -p rss-core network_ -- --ignored --nocapture
 ```bash
 cd apps/desktop
 ui/node_modules/.bin/tauri build --bundles deb
-# 产物：target/release/bundle/deb/Rust RSS Reader_0.1.0_amd64.deb
 ```
 
 ### 数据目录
@@ -160,38 +149,28 @@ TUI: ratatui, crossterm
 
 ### Build & Run
 
-**Prerequisites**
-- Rust toolchain (with `cargo`)
-- Node.js 18+ (with `npm`, only needed for the desktop frontend)
+Prerequisites: Rust toolchain, Node.js 18+ (desktop frontend)
 
-**Desktop (step-by-step, no script)**
+**Desktop**
 
 ```bash
-# 1. Build the frontend (first time, or after frontend changes)
 cd apps/desktop/ui
-npm install          # install frontend deps (first time)
+npm install
 npm run build
 cd ../..
-
-# 2. Compile & run the desktop app (frontend is embedded via custom-protocol)
 cargo run -p rss-desktop
 ```
 
-> `./run-desktop.sh` is an equivalent wrapper for the steps above.
-> To run an already-compiled release binary directly: `./target/release/rss-desktop`.
-
-**Terminal (WIP)**
+**Terminal**
 
 ```bash
-cargo run -p rss-tui    # press ? for help
+cargo run -p rss-tui
 ```
 
 **Tests**
 
 ```bash
 cargo test --workspace
-# real-network integration tests (ignored by default)
-cargo test -p rss-core network_ -- --ignored --nocapture
 ```
 
 **Build deb**
@@ -199,7 +178,6 @@ cargo test -p rss-core network_ -- --ignored --nocapture
 ```bash
 cd apps/desktop
 ui/node_modules/.bin/tauri build --bundles deb
-# artifact: target/release/bundle/deb/Rust RSS Reader_0.1.0_amd64.deb
 ```
 
 ### Data
