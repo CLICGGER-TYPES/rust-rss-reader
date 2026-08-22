@@ -1,33 +1,15 @@
 # Rust RSS Reader
 
-> 用 Rust 复刻 [Fluent Reader](https://github.com/yang991178/fluent_reader) 的 RSS 阅读器。
+> 用 Rust 复刻 [Fluent Reader](https://github.com/yang991178/fluent-reader) 的 RSS 阅读器。
 > A Fluent Reader-inspired RSS reader written in Rust.
 
 **状态 / Status**：桌面端功能较完整，持续迭代中；终端版（TUI）仍在完善，功能落后于桌面端。
 Desktop client is feature-complete and actively iterated; the terminal (TUI) client is still WIP and lags behind.
 
 <p align="center">
-  <img src="docs/screenshots/01-main-light.png" alt="主界面（浅色）" width="720"/>
-  <br/>
-  <sub>主界面 / Main view (light)</sub>
-</p>
-
-<p align="center">
   <img src="docs/screenshots/02-reader.png" alt="阅读区" width="720"/>
   <br/>
   <sub>阅读区 / Reader</sub>
-</p>
-
-<p align="center">
-  <img src="docs/screenshots/03-settings.png" alt="设置页" width="720"/>
-  <br/>
-  <sub>设置页 / Settings</sub>
-</p>
-
-<p align="center">
-  <img src="docs/screenshots/04-main-dark.png" alt="暗黑模式" width="720"/>
-  <br/>
-  <sub>暗黑模式 / Dark mode</sub>
 </p>
 
 ---
@@ -124,7 +106,7 @@ cargo test -p rss-core network_ -- --ignored --nocapture
 
 ### 致谢 / 模仿
 
-- 界面与交互模仿 [Fluent Reader](https://github.com/yang991178/fluent_reader)，使用微软 [Fluent UI React 9](https://react.fluentui.dev/) 组件库
+- 界面与交互模仿 [Fluent Reader](https://github.com/yang991178/fluent-reader)，使用微软 [Fluent UI React 9](https://react.fluentui.dev/) 组件库
 - 全文抓取基于 [readability](https://crates.io/crates/readability)
 
 ### License
@@ -176,7 +158,7 @@ cd apps/desktop && ui/node_modules/.bin/tauri build --bundles deb
 
 ### Credit
 
-UI/UX inspired by [Fluent Reader](https://github.com/yang991178/fluent_reader), built on [Fluent UI React 9](https://react.fluentui.dev/); full-text extraction based on [readability](https://crates.io/crates/readability).
+UI/UX inspired by [Fluent Reader](https://github.com/yang991178/fluent-reader), built on [Fluent UI React 9](https://react.fluentui.dev/); full-text extraction based on [readability](https://crates.io/crates/readability).
 
 ### License
 
