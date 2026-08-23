@@ -122,7 +122,11 @@ pub(crate) fn browser_get(client: &reqwest::blocking::Client, url: &str) -> reqw
 
 /// 用 readability 抓取网页正文（返回 HTML）。readability 结果明显短于正文容器时，
 /// 改用容器提取（对"多卡片/聚合"类文章更完整，如 sspai 派早报）。
-pub(crate) fn fetch_full_content(client: &Client, page_url: &str) -> Result<Option<String>> {
+pub(crate) fn fetch_full_content(
+    client: &Client,
+    page_url: &str,
+    render_fallback: bool,
+) -> Result<Option<String>> {
     tracing::info!(target: "rss_core::fetch", "[fetch_full] start url={page_url}");
     let resp = browser_get(client, page_url).send()?;
     let status = resp.status();
@@ -146,6 +150,19 @@ pub(crate) fn fetch_full_content(client: &Client, page_url: &str) -> Result<Opti
             let normalized = g::normalize_images(&html, page_url);
             let len = g::text_len(&normalized);
             tracing::info!(target: "rss_core::fetch", "[fetch_full] adapter={} text_len={len}", adapter.name());
+            if len >= 200 {
+                return Ok(Some(normalized));
+            }
+        }
+    }
+
+    // 通用 Flashcat statuspage 兜底：无 host 适配器时，按页面内容特征探测
+    //（DeepSeek 等多家公司的状态页都走 Flashcat，正文容器 class 通用，readability 常选不中）
+    if adapters::flashcat_status::is_flashcat_page(&body) {
+        if let Some(html) = adapters::flashcat_status::extract_flashcat_page(&body) {
+            let normalized = g::normalize_images(&html, page_url);
+            let len = g::text_len(&normalized);
+            tracing::info!(target: "rss_core::fetch", "[fetch_full] flashcat_status text_len={len}");
             if len >= 200 {
                 return Ok(Some(normalized));
             }
@@ -195,12 +212,33 @@ pub(crate) fn fetch_full_content(client: &Client, page_url: &str) -> Result<Opti
         }
     };
 
-    let normalized = g::normalize_images(&chosen, page_url);
+    let normalized = g::fix_protocol_relative(&g::normalize_images(&chosen, page_url));
     tracing::info!(
         target: "rss_core::fetch",
         "[fetch_full] ok branch={branch} text_len={}",
         g::text_len(&normalized)
     );
+    // 通用提取不足（<200 字，如 JS 渲染站）→ 可选用 headless 浏览器渲染后再提取
+    if render_fallback && g::text_len(&normalized) < 200 {
+        if let Some(rendered) = crate::fetch::render::render_dom(page_url) {
+            let mut cur2 = std::io::Cursor::new(rendered.as_bytes().to_vec());
+            let r2 = readability::extractor::extract(&mut cur2, &url)
+                .map(|p| p.content)
+                .ok();
+            let c2 = g::extract_content_container(&rendered);
+            let rl2 = r2.as_deref().map(g::text_len).unwrap_or(0);
+            let cl2 = c2.as_deref().map(g::text_len).unwrap_or(0);
+            let best = if cl2 >= 200 && cl2 >= rl2 { c2 } else { r2 };
+            if let Some(b) = best {
+                let rb = g::fix_protocol_relative(&g::normalize_images(&b, page_url));
+                let len = g::text_len(&rb);
+                if len >= 200 {
+                    tracing::info!(target: "rss_core::fetch", "[fetch_full] headless_render text_len={len} url={page_url}");
+                    return Ok(Some(rb));
+                }
+            }
+        }
+    }
     Ok(Some(normalized))
 }
 

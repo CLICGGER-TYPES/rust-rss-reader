@@ -85,11 +85,13 @@ fn resolve_image_url(url: &str, referer: Option<&str>) -> String {
 
 /// 抓取图片字节。`referer` 为可选源站 URL（防盗链更准：多数 CDN 要求 Referer=引用页面域，
 /// 而非图片自身域）。无 referer 时回退到图片 host。带磁盘缓存：命中直接返回，失败重试 3 次。
+/// `max_width`：若图宽超过该值则压缩到该宽度（WebView 解码 4K 大图会卡死，压缩后流畅）。
 pub fn fetch_image(
     client: &Client,
     data_dir: &Path,
     url: &str,
     referer: Option<&str>,
+    max_width: Option<u32>,
 ) -> Result<FetchedImage> {
     let url = resolve_image_url(url, referer);
     let cache_dir = data_dir.join("img_cache");
@@ -119,13 +121,19 @@ pub fn fetch_image(
         }
         match req.send() {
             Ok(resp) if resp.status().is_success() => {
-                let content_type = resp
+                let mut content_type = resp
                     .headers()
                     .get(CONTENT_TYPE)
                     .and_then(|v| v.to_str().ok())
                     .unwrap_or("image/*")
                     .to_string();
-                let bytes = resp.bytes()?;
+                let mut bytes = resp.bytes()?.to_vec();
+                if let Some(mw) = max_width {
+                    if let Some((b, ct)) = compress_if_large(&bytes, &content_type, mw) {
+                        bytes = b;
+                        content_type = ct;
+                    }
+                }
                 write_cache(&cache_dir, &url, &bytes, &content_type);
                 tracing::info!(
                     target: "rss_core::image",
@@ -161,4 +169,27 @@ pub fn fetch_image(
         }
     }
     Err(last_err.unwrap_or_else(|| Error::Fetch("image fetch failed".into())))
+}
+
+/// 若图片宽超过 `max_width` 则等比压缩，返回 (新bytes, 新content_type)。PNG 保留 PNG，
+/// 其余（含透明）转 JPEG。失败返回 None（保留原图）。
+fn compress_if_large(bytes: &[u8], ct: &str, max_width: u32) -> Option<(Vec<u8>, String)> {
+    let img = image::load_from_memory(bytes).ok()?;
+    if img.width() <= max_width {
+        return None;
+    }
+    let ratio = max_width as f32 / img.width() as f32;
+    let h = ((img.height() as f32) * ratio).round().max(1.0) as u32;
+    let resized = img.resize(max_width, h, image::imageops::FilterType::Lanczos3);
+    let mut out = Vec::new();
+    if ct.contains("png") && img.color().has_alpha() {
+        resized
+            .write_to(&mut std::io::Cursor::new(&mut out), image::ImageFormat::Png)
+            .ok()?;
+        return Some((out, "image/png".into()));
+    }
+    let rgb = resized.to_rgb8();
+    rgb.write_to(&mut std::io::Cursor::new(&mut out), image::ImageFormat::Jpeg)
+        .ok()?;
+    Some((out, "image/jpeg".into()))
 }

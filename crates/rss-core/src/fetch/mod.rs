@@ -5,3 +5,4 @@
 
 pub mod adapters;
 pub mod generic;
+pub mod render;

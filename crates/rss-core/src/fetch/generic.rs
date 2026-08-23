@@ -59,7 +59,8 @@ pub(crate) fn extract_content_container(html: &str) -> Option<String> {
         ".entry-content",
         ".article-body",
         ".post-body",
-        ".article_content",   // CSDN
+        ".article_content",   // CSDN 外层
+        ".htmledit_views",    // CSDN 正文（skins）
         ".artical-body",      // FreeBuf（拼写）
         ".tinymce-editor",    // FreeBuf / 常见富文本
         ".content-detail",    // FreeBuf
@@ -140,6 +141,8 @@ pub(crate) fn clean_container(html: &str) -> String {
     let block_tags = [
         "<script", "<style", "<nav", "<footer", "<header", "<aside", "<form",
     ];
+    // 非内容的资源/清理标签：link（CSS/icon，会残留源站样式）、meta、base、iframe(不带内容时)
+    let resource_tags = ["<link", "<meta", "<base"];
     // 评论区/讨论/推荐等容器（div/section/ul/ol + 类名特征），深度匹配删除
     let noise_class_markers = [
         "comment", "discussion", "recommend", "reply", "related", "charge", "copyright",
@@ -157,6 +160,19 @@ pub(crate) fn clean_container(html: &str) -> String {
             if lower[i..].starts_with(tag) {
                 i = skip_block(&lower, i, tag);
                 skipped = true;
+                break;
+            }
+        }
+        if skipped {
+            continue;
+        }
+        // 1.5) 资源标签（link/meta/base）：自闭合，整段丢弃（残留源站 CSS/icon，还会串样式）
+        for tag in resource_tags {
+            if lower[i..].starts_with(tag) {
+                if let Some(gt) = lower[i..].find('>') {
+                    i += gt + 1;
+                    skipped = true;
+                }
                 break;
             }
         }
@@ -505,6 +521,24 @@ mod tests {
     }
 
     #[test]
+    fn csdn_extracts_htmledit_views_and_drops_link() {
+        // 复现 CSDN：外层 .article_content 内嵌 .htmledit_views，顶部残留 <link rel=stylesheet>
+        let html = r#"<html><body><div id="article_content" class="article_content clearfix">
+            <link rel="stylesheet" href="https://csdnimg.cn/xx/editor.css">
+            <div id="content_views" class="htmledit_views atom-one-dark">
+                <h2>1. 什么是位域？</h2>
+                <p>位域是 C++ 中一种特殊的结构体成员声明方式，允许程序员以位为单位来指定成员变量所占用的内存空间大小。</p>
+                <pre><code class="language-cpp">struct StatusRegister { unsigned flag1:1; };</code></pre>
+                <p>通过这种方式，我们可以将多个布尔标志或小范围整数打包到一个结构体内。</p>
+                <p>这段说明文字足够长以通过提取阈值。继续补充一些内容，确保文本长度能稳定超过二百字符阈值，从而被容器提取逻辑采纳。</p>
+            </div></div></body></html>"#;
+        let got = extract_content_container(html).expect("container");
+        assert!(!got.contains("<link"), "应清除残留的 <link>（CSDN 源站 CSS）");
+        assert!(got.contains("什么是位域"), "应命中正文");
+        assert!(got.contains("结构体成员"), "正文应完整");
+    }
+
+    #[test]
     fn clean_removes_inline_events() {
         let html = r#"<p onclick="alert(1)" onerror="x">正文</p>"#;
         let cleaned = clean_container(html);
@@ -614,4 +648,11 @@ mod tests {
         assert!(detect_cloudflare("<html><script src=\"https://challenges.cloudflare.com/cdn-cgi/...\"></script>"));
         assert!(!detect_cloudflare("<html><title>正常页面</title><p>正文</p></html>"));
     }
+}
+
+/// 协议相对 URL（`//host/...`）补全为 `https://`。正文里的第三方 iframe（如
+/// gcores 的 B 站视频 `//player.bilibili.com/...`）与资源 src 常是协议相对，
+/// 不补全浏览器能加载但我们的媒体识别/后续处理拿不到绝对地址。
+pub(crate) fn fix_protocol_relative(html: &str) -> String {
+    html.replace("src=\"//", "src=\"https://").replace("src='//", "src='https://")
 }

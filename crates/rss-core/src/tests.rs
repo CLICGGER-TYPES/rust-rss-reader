@@ -432,7 +432,7 @@ fn network_debug_single_fetch() {
         "https://example.com/articles/2.html",
         "https://example.com/articles/3.html",
     ] {
-        match crate::feed::fetch_full_content(&client, u) {
+        match crate::feed::fetch_full_content(&client, u, false) {
             Ok(Some(h)) => println!("{u}\n  OK len={} text={}", h.len(), crate::fetch::generic::text_len(&h)),
             Ok(None) => println!("{u}\n  None (no/empty content or cf)"),
             Err(e) => println!("{u}\n  ERR: {e}"),
@@ -490,7 +490,7 @@ fn network_debug_fetch_demo() {
         "https://example.com/articles/4.html",
         "https://example.com/articles/5.html",
     ] {
-        match crate::feed::fetch_full_content(&client, u) {
+        match crate::feed::fetch_full_content(&client, u, false) {
             Ok(Some(h)) => {
                 let txt = crate::fetch::generic::text_len(&h);
                 println!("{u}\n  OK html_len={} text_len={txt}", h.len());
@@ -509,6 +509,57 @@ fn rss_core_logging_smoke() {
     // 示例地址为占位，实际网络验证时替换为目标站点 URL。
     // 手动跑：cargo test -p rss-core rss_core_logging -- --ignored --nocapture
     let client = crate::build_client(None).expect("client");
-    let res = crate::feed::fetch_full_content(&client, "https://example.com/articles/4.html");
+    let res = crate::feed::fetch_full_content(&client, "https://example.com/articles/4.html", false);
     println!("fetch result: {res:?}");
+}
+
+
+
+
+/// 网络回归：后量子 TLS（X25519MLKEM768-only）站点抓取（如 DeepSeek status）。
+/// 依赖 openssl/native-tls 栈。默认 ignore，手动跑：
+/// `cargo test -p rss-core network_pq -- --ignored --nocapture`
+#[test]
+#[ignore]
+fn network_debug_pq_tls() {
+    let client = crate::build_client(None).expect("client");
+    let u = "https://status.deepseek.com/feed.rss";
+    match crate::feed::fetch_full_content(&client, u, false) {
+        Ok(Some(h)) => println!("OK {u} len={}", h.len()),
+        Ok(None) => println!("NONE {u}"),
+        Err(e) => println!("ERR {u}: {e}"),
+    }
+}
+
+#[test]
+#[ignore]
+fn network_deepseek_incident_adapter() {
+    let client = crate::build_client(None).expect("client");
+    for u in [
+        "https://status.deepseek.com/incidents/6877795382287",
+        "https://status.deepseek.com/incidents/6877795382287/",
+    ] {
+        match crate::feed::fetch_full_content(&client, u, false) {
+            Ok(Some(h)) => {
+                println!("OK {u} len={} text_len={}", h.len(), crate::fetch::generic::text_len(&h));
+                println!("  head: {}", h[..h.len().min(120)].replace('\n', " "));
+            }
+            Ok(None) => println!("NONE {u}"),
+            Err(e) => println!("ERR {u}: {e}"),
+        }
+    }
+}
+
+
+#[test]
+#[ignore]
+fn headless_fallback_full() {
+    // gcores radio 无 adapter，JS 渲染站 → 验证 headless 兜底全流程
+    let client = crate::build_client(None).unwrap();
+    let u = "https://www.gcores.com/radios/218651";
+    match crate::feed::fetch_full_content(&client, u, true) {
+        Ok(Some(h)) => println!("OK text_len={}", crate::fetch::generic::text_len(&h)),
+        Ok(None) => println!("NONE (通用+headless 都无正文)"),
+        Err(e) => println!("ERR {e}"),
+    }
 }

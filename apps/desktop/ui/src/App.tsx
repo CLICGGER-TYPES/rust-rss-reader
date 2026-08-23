@@ -525,15 +525,49 @@ const MEDIA_HOSTS = [
 
 function hostOf(url: string): string {
   try {
-    return new URL(url).hostname.replace(/^www\./, "");
+    // 兼容协议相对 URL（如 gcores 视频 `//player.bilibili.com/...`）
+    const u = url.startsWith("//") ? "https:" + url : url;
+    return new URL(u).hostname.replace(/^www\./, "");
   } catch {
     return "";
   }
 }
 
+// 把 adapter 美化的正文 HTML 片段包成一张可 srcDoc 显示的"正文快照"页（内联样式自带，无需额外 CSS）
+function buildSnapshotHtml(contentHtml: string): string {
+  return (
+    '<!DOCTYPE html><html><head><meta charset="utf-8">' +
+    "<style>" +
+    "html,body{margin:0;padding:0;background:transparent;color:inherit;}" +
+    "body{font-family:system-ui,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,'PingFang SC','Microsoft YaHei',sans-serif;" +
+    "line-height:1.65;padding:16px 18px;font-size:15px;word-break:break-word;}" +
+    "body img{max-width:100%;height:auto;border-radius:6px;display:block;margin:10px auto;}" +
+    "body a{color:#4f8cf7;text-decoration:none;}" +
+    "body h1,h2,h3,h4{line-height:1.3;margin:14px 0 8px;}" +
+    "body p{margin:0 0 10px;}" +
+    "body pre{white-space:pre-wrap;background:rgba(127,127,127,.08);border:1px solid rgba(127,127,127,.18);border-radius:8px;padding:10px 12px;overflow-x:auto;}" +
+    "body blockquote{border-left:3px solid rgba(127,127,127,.25);margin:8px 0;padding:2px 12px;color:rgba(127,127,127,.85);}" +
+    "</style></head><body>" +
+    contentHtml +
+    "</body></html>"
+  );
+}
+
 function isMediaHost(url: string): boolean {
   const h = hostOf(url);
   return MEDIA_HOSTS.some((m) => h === m || h.endsWith("." + m));
+}
+
+/**
+ * 把 bilibili 视频链接统一重构为标准 HTML5 外链播放地址（少数派那种能播的格式）。
+ * WebView(webkitgtk) 只认 `player.bilibili.com/player.html?bvid=BV...&autoplay=false`；
+ * 机核等源输出的裸 BV 链接 / www.bilibili.com/video/BV... / 协议相对链接都会黑屏。
+ * 这里提取 BV 号拼接回标准嵌入地址，从根上绕过黑屏。
+ */
+function normalizeBilibiliUrl(url: string): string {
+  const m = (url || "").match(/BV[0-9A-Za-z]{10,12}/);
+  if (m) return `https://player.bilibili.com/player.html?bvid=${m[0]}&autoplay=false`;
+  return url;
 }
 
 /** 提取正文里的第三方播放器 URL（白名单 iframe）。直链音/视频保留原生控件，不收集。 */
@@ -542,7 +576,7 @@ function extractMediaUrls(html: string): string[] {
   const iframeRe = /<iframe\b[^>]*?\bsrc=["']([^"']+)["']/gi;
   let m: RegExpExecArray | null;
   while ((m = iframeRe.exec(html)) !== null) {
-    if (isMediaHost(m[1])) urls.push(m[1]);
+    if (isMediaHost(m[1])) urls.push(normalizeBilibiliUrl(m[1]));
   }
   return urls;
 }
@@ -691,6 +725,14 @@ export default function App({ dark, themeMode, setThemeMode, decorations, setDec
     getCurrentWindow().startDragging();
   };
 
+  // 双击标题栏空白处 → 切换最大化/还原（Fluent Reader 行为）
+  const onTitleBarDoubleClick = (e: React.MouseEvent) => {
+    if (decorations) return;
+    const t = e.target as HTMLElement;
+    if (t.closest("button, input, select, a, [role='tab'], [role^='menu'], [role^='menuitem']")) return;
+    getCurrentWindow().toggleMaximize();
+  };
+
   const [folders, setFolders] = React.useState<Folder[]>([]);
   const [feeds, setFeeds] = React.useState<Feed[]>([]);
   const [unread, setUnread] = React.useState<UnreadStats>({ total: 0, per_feed: [] });
@@ -700,9 +742,8 @@ export default function App({ dark, themeMode, setThemeMode, decorations, setDec
   // 渲染时同步当前选中文章 id：async 闭包里判断"是否仍是当前文章"用
   const selectedArticleIdRef = React.useRef<number | null>(null);
   selectedArticleIdRef.current = selectedArticleId;
-  // 抓取/图片加载的运行序号：重试或内容更新后旧批不碰新状态
+  // 抓取运行序号：重试后旧批不碰新状态
   const fetchRunRef = React.useRef(0);
-  const imgRunRef = React.useRef(0);
   // 进行中的图片 url 集合：pending 为空 ≠ 加载完，必须等 inflight 清空
   const imgInFlightRef = React.useRef<Set<string>>(new Set());
   const [search, setSearch] = React.useState("");
@@ -720,8 +761,15 @@ export default function App({ dark, themeMode, setThemeMode, decorations, setDec
   const [drawerOpen, setDrawerOpen] = React.useState(false);
   const [fontSize, setFontSize] = React.useState(16);
   const [openOriginal, setOpenOriginal] = React.useState(false);
+  // headless 渲染后的原文 HTML（用于 WebView 打不开的站，如 status.deepseek.com）
+  const [renderedHtml, setRenderedHtml] = React.useState<string | null>(null);
+  // 用户设置：强制用 headless 渲染打开原文（不勾则仅 WebView 打不开的站自动用）
+  const [forceHeadlessRender, setForceHeadlessRender] = React.useState(false);
   const [originalBlocked, setOriginalBlocked] = React.useState(false);
   const [fileView, setFileView] = React.useState<PageResource | null>(null);
+  // 原文显示：webview 打不开的站用"正文快照"(adapter 美化 HTML) 或"整页渲染"(headless) 显示
+  const [originalSnapshot, setOriginalSnapshot] = React.useState<string | null>(null);
+  const [originalViewMode, setOriginalViewMode] = React.useState<"snapshot" | "page">("snapshot");
   const [loadingOriginal, setLoadingOriginal] = React.useState(false);
   const [loadingFull, setLoadingFull] = React.useState(false);
   const [fetchFailed, setFetchFailed] = React.useState(false);
@@ -732,8 +780,7 @@ export default function App({ dark, themeMode, setThemeMode, decorations, setDec
   const sortOrderRef = React.useRef("desc");
   sortOrderRef.current = sortOrder;
   const [imgMap, setImgMap] = React.useState<Record<string, string>>({});
-  const [imgStatus, setImgStatus] = React.useState("");
-  const [imgLoading, setImgLoading] = React.useState(false);
+
   const [mediaUrls, setMediaUrls] = React.useState<string[]>([]);
   const [playIdx, setPlayIdx] = React.useState<number | null>(null);
   const fetchedImgsRef = React.useRef<Set<string>>(new Set());
@@ -742,11 +789,29 @@ export default function App({ dark, themeMode, setThemeMode, decorations, setDec
   const fetchedFullRef = React.useRef<Set<number>>(new Set());
   const articlesRef = React.useRef<Article[]>([]);
   articlesRef.current = articles;
+  // 正在刷新的文章 id（刷新文章 A 时若切到 B，B 不被"刷新中"挡住）
+  const refreshingArticleIdRef = React.useRef<number | null>(null);
 
   const selectedArticle = React.useMemo(
     () => (selectedArticleId != null ? articles.find((a) => a.id === selectedArticleId) ?? null : null),
     [articles, selectedArticleId]
   );
+  // 当前选中文章对象 ref（message 监听等闭包里读最新值用）
+  const selectedArticleRef = React.useRef(selectedArticle);
+  selectedArticleRef.current = selectedArticle;
+
+  // 仅当前文章正文用到的已代理图子集：封面图后台代理导致 imgMap 变化时，
+  // 不会触发 reader iframe 重建闪跳（readerDocHtml 只依赖本子集）
+  const bodyImgMap = React.useMemo(() => {
+    const body = selectedArticle?.content || selectedArticle?.summary || "";
+    const urls = new Set(extractImgUrls(body));
+    const m: Record<string, string> = {};
+    for (const [u, v] of Object.entries(imgMap)) {
+      if (urls.has(u)) m[u] = v;
+    }
+    return m;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedArticle, imgMap]);
 
   const visibleArticles = React.useMemo(() => articles, [articles]);
 
@@ -781,6 +846,8 @@ export default function App({ dark, themeMode, setThemeMode, decorations, setDec
       setArticles([]);
       setSelectedArticleId(null);
       setOpenOriginal(false);
+    setRenderedHtml(null);
+    setOriginalSnapshot(null);
       setStatus(`${t("status.clearingCache")} · ${t("status.refreshing")}`);
       // 只重抓各源 RSS 文章元数据（不 backfill 全文，避免网络风暴卡死）；
       // 全文在打开文章时按需抓取（content_fetched=0 保证自动抓）
@@ -805,7 +872,18 @@ export default function App({ dark, themeMode, setThemeMode, decorations, setDec
     api.getSetting("cardSize").then((v) => {
       if (v === "small" || v === "large") setCardSize(v);
     });
+    api.getSetting("force_headless_render").then((v) => setForceHeadlessRender(v === "1" || v === "true"));
+    api.getSetting("original_view_mode").then((v) => {
+      if (v === "page") setOriginalViewMode("page");
+    });
   }, []);
+
+  // WebView 直连打不开的站（强制后量子 TLS 等，如 status.deepseek.com / Flashcat 状态页）
+  // → 自动改用 headless 渲染整页后 srcDoc 显示
+  const isWebviewBlockedHost = (url: string): boolean => {
+    const h = hostOf(url);
+    return h === "status.deepseek.com" || h.endsWith("flashcat.cloud");
+  };
 
   const loadArticles = React.useCallback(async (sel: Selection, q: string, sortOverride?: string) => {
     try {
@@ -980,95 +1058,6 @@ export default function App({ dark, themeMode, setThemeMode, decorations, setDec
     })();
   }, [selectedArticleId, feeds, fullRetryCount]);
 
-  // 正文图片代理：扫描当前文章正文的图，全部加载完成后一次性提交 imgMap（iframe 只重建一次）。
-  // 加载期间阅读区转圈。不用 cancelled（会被重跑误杀导致 imgLoading 卡 true），
-  // 用 run token + inflight 集合：pending 为空≠加载完，必须等 inflight 清空 + 最新运行才关转圈。
-  React.useEffect(() => {
-    const curId = selectedArticleId;
-    const rawBody =
-      selectedArticle?.content ||
-      selectedArticle?.summary ||
-      "";
-    const needed = new Set<string>();
-    extractImgUrls(rawBody).forEach((u) => needed.add(u));
-    const pending = [...needed].filter(
-      (u) => !imgMap[u] && !fetchedImgsRef.current.has(u) && (imgRetriesRef.current[u] ?? 0) <= 2,
-    );
-    if (pending.length === 0) {
-      // 没有新图要加载：仅当没有进行中的图时才关闭转圈（进行中由本批负责）
-      if (imgInFlightRef.current.size === 0) setImgLoading(false);
-      return;
-    }
-    const run = ++imgRunRef.current;
-    pending.forEach((u) => {
-      imgInFlightRef.current.add(u);
-      fetchedImgsRef.current.add(u);
-    });
-    let done = 0;
-    let failed = 0;
-    let timeout = 0;
-    const results: Record<string, string> = {};
-    setImgLoading(true);
-    setImgStatus(`0/${pending.length}`);
-    opLog.imagesPending(pending.length);
-    opLog.readerState({ imgLoading: true });
-    (async () => {
-      const worker = async (start: number) => {
-        const retryFail = (u: string) => {
-          const n = (imgRetriesRef.current[u] ?? 0) + 1;
-          imgRetriesRef.current[u] = n;
-          // 允许再试 2 轮（后端 fetch_image 已内置 3 次重试，此兜底缓解偶发图裂）
-          if (n <= 2) fetchedImgsRef.current.delete(u);
-        };
-        for (let i = start; i < pending.length; i += 3) {
-          const u = pending[i];
-          try {
-            // Referer 用文章源站 URL（CDN 防盗链多按引用页域校验），图片代理命中磁盘缓存二次秒出
-            // 单图 8s 超时：网络慢/代理挂起时跳过该图，避免 0/x 卡死
-            const img = await Promise.race([
-              api.fetchImage(u, selectedArticle?.url ?? undefined),
-              new Promise<never>((_, rej) => setTimeout(() => rej(new Error("img timeout")), 8000)),
-            ]);
-            const data = b64ToDataUrl(img);
-            if (data) {
-              results[u] = data;
-            } else {
-              retryFail(u);
-              failed += 1;
-            }
-          } catch (e) {
-            retryFail(u);
-            if (String(e) === "img timeout" || String(e).includes("img timeout")) timeout += 1;
-            else failed += 1;
-          }
-          imgInFlightRef.current.delete(u);
-          done += 1;
-          setImgStatus(`${done}/${pending.length}`);
-        }
-      };
-      await Promise.all([worker(0), worker(1), worker(2)]);
-      // 无条件合入全局图缓存（无害；切换文章后由清理 effect 删除非当前图）
-      setImgMap((prev) => {
-        const next = { ...prev };
-        let changed = false;
-        for (const [k, v] of Object.entries(results)) {
-          if (!prev[k]) {
-            next[k] = v;
-            changed = true;
-          }
-        }
-        return changed ? next : prev;
-      });
-      // 只有最新一次运行 + 没有进行中的图 + 仍是当前文章才关转圈
-      if (run === imgRunRef.current && imgInFlightRef.current.size === 0 && selectedArticleIdRef.current === curId) {
-        setImgLoading(false);
-        setImgStatus("");
-        opLog.imagesDone(done, pending.length, failed, timeout);
-        opLog.readerState({ imgLoading: false });
-      }
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedArticleId, selectedArticle?.content, selectedArticle?.summary]);
 
   // 列表封面图代理：后台加载，不阻塞阅读区转圈（失败静默，可重试）
   React.useEffect(() => {
@@ -1087,7 +1076,7 @@ export default function App({ dark, themeMode, setThemeMode, decorations, setDec
     });
     (async () => {
       const worker = async (start: number) => {
-        for (let i = start; i < pending.length; i += 3) {
+        for (let i = start; i < pending.length; i += 6) {
           const u = pending[i];
           try {
             const img = await Promise.race([
@@ -1110,7 +1099,7 @@ export default function App({ dark, themeMode, setThemeMode, decorations, setDec
           imgInFlightRef.current.delete(u);
         }
       };
-      await Promise.all([worker(0), worker(1), worker(2)]);
+      await Promise.all([worker(0), worker(1), worker(2), worker(3), worker(4), worker(5)]);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visibleArticles]);
@@ -1145,12 +1134,51 @@ export default function App({ dark, themeMode, setThemeMode, decorations, setDec
     setMediaUrls(extractMediaUrls(rawBody));
   }, [selectedArticle]);
 
-  // 正文内嵌播放按钮 → postMessage → 弹窗播放
+  // 正文内嵌播放按钮 → postMessage → 弹窗播放；图片直连失败（防盗链）→ 兜底代理
   React.useEffect(() => {
     const onMsg = (e: MessageEvent) => {
       const d = e.data;
       if (d && typeof d === "object" && d.type === "rss-play" && typeof d.idx === "number") {
         setPlayIdx(d.idx);
+      } else if (
+        d &&
+        typeof d === "object" &&
+        d.type === "img-fallback" &&
+        typeof d.src === "string" &&
+        d.src.startsWith("http")
+      ) {
+        const src = d.src as string;
+        api
+          .fetchImage(src, selectedArticleRef.current?.url ?? undefined)
+          .then((img) => {
+            const data = b64ToDataUrl(img);
+            if (data) {
+              setImgMap((prev) => (prev[src] ? prev : { ...prev, [src]: data }));
+            }
+          })
+          .catch(() => {
+            /* 兜底失败静默，保持原图（裂图） */
+          });
+      } else if (
+        d &&
+        typeof d === "object" &&
+        d.type === "img-overlarge" &&
+        typeof d.src === "string" &&
+        d.src.startsWith("http")
+      ) {
+        // 超大图（>1600px）→ 后端压缩到 1600 宽，避免 WebView 解码 4K 卡死
+        const src = d.src as string;
+        api
+          .fetchImage(src, selectedArticleRef.current?.url ?? undefined, 1600)
+          .then((img) => {
+            const data = b64ToDataUrl(img);
+            if (data) {
+              setImgMap((prev) => (prev[src] ? prev : { ...prev, [src]: data }));
+            }
+          })
+          .catch(() => {
+            /* 压缩失败保持原图 */
+          });
       }
     };
     window.addEventListener("message", onMsg);
@@ -1174,6 +1202,7 @@ export default function App({ dark, themeMode, setThemeMode, decorations, setDec
     // 有选中文章 → 强制重新抓取当前文章全文；否则刷新全部订阅
     if (selectedArticleId != null) {
       setStatus(t("status.fetching"));
+      refreshingArticleIdRef.current = selectedArticleId;
       try {
         setOpenOriginal(false);
         setFileView(null);
@@ -1183,11 +1212,13 @@ export default function App({ dark, themeMode, setThemeMode, decorations, setDec
           setArticles((prev) => prev.map((x) => (x.id === updated.id ? updated : x)));
         }
         setStatus(ok ? t("status.fetched") : t("status.noFull"));
-        if (!ok) setOpenOriginal(true);
+        // 已切走时不抢弹原文窗口
+        if (!ok && refreshingArticleIdRef.current === selectedArticleId) setOpenOriginal(true);
       } catch (e) {
         setStatus(t("status.fetchFailed") + e);
       } finally {
         setRefreshing(false);
+        refreshingArticleIdRef.current = null;
       }
       return;
     }
@@ -1203,6 +1234,7 @@ export default function App({ dark, themeMode, setThemeMode, decorations, setDec
       setStatus(t("status.refreshFailed") + e);
     } finally {
       setRefreshing(false);
+      refreshingArticleIdRef.current = null;
     }
   };
 
@@ -1341,7 +1373,7 @@ export default function App({ dark, themeMode, setThemeMode, decorations, setDec
     if (bodyHtml && !/<[a-zA-Z\/]/.test(bodyHtml)) {
       bodyHtml = `<p>${escapeHtml(bodyHtml).replace(/\n+/g, "<br>")}</p>`;
     }
-    const bodyHtmlReady = replaceMediaIframes(replaceImages(bodyHtml, imgMap));
+    const bodyHtmlReady = replaceMediaIframes(replaceImages(bodyHtml, bodyImgMap));
     const meta = [
       feedName(selectedArticle.feed_id),
       selectedArticle.author ? `${t("reader.by")} ${selectedArticle.author}` : null,
@@ -1395,26 +1427,88 @@ export default function App({ dark, themeMode, setThemeMode, decorations, setDec
           var b = e.target && e.target.closest ? e.target.closest('button.rss-play') : null;
           if (b) { parent.postMessage({type:'rss-play', idx: +b.getAttribute('data-idx')}, '*'); }
         });
+        // 图片懒加载（视口内立即加载，下方滚动到才加载，快首屏）
+        document.querySelectorAll('img').forEach(function(i){ if (!i.loading) i.loading='lazy'; });
+        // 超大图（>1600px 宽，WebKit 解码 4K 大图会卡死）→ 外层换压缩代理
+        document.querySelectorAll('img').forEach(function(i){
+          var check = function(){ if (this.naturalWidth > 1600 && !this.getAttribute('data-fb')) { this.setAttribute('data-fb','1'); parent.postMessage({type:'img-overlarge', src:this.src}, '*'); } };
+          if (i.complete) check.call(i); else i.addEventListener('load', check);
+        });
+        // 图片直连失败（防盗链 403 等）→ 外层补代理（带 Referer）
+        document.addEventListener('error', function(e){
+          var t = e.target;
+          if (t && t.tagName === 'IMG' && t.src && t.src.indexOf('http') === 0 && !t.getAttribute('data-fb')) {
+            t.setAttribute('data-fb', '1');
+            parent.postMessage({type:'img-fallback', src: t.src}, '*');
+          }
+        }, true);
       </script>
     </body></html>`;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedArticle, imgMap, fontSize, dark]);
+  }, [selectedArticle, bodyImgMap, fontSize, dark]);
 
   const toggleSidebar = () => {
     if (viewMode === "list") setSidebarCollapsed((v) => !v);
     else setDrawerOpen((v) => !v);
   };
   // "应用内打开原文"：探测类型 → HTML 内嵌真实网页（像浏览器）；文件（PDF 等）走文件视图。
+  // WebView 打不开的站（强制后量子 TLS 等）或用户强制 → 用 headless 渲染整页后 srcDoc 显示。
   const toggleOriginal = async () => {
     if (!selectedArticle?.url) return;
     if (loadingOriginal) return;
     setLoadingOriginal(true);
     setOriginalBlocked(false);
     try {
-      const res = await api.probeUrl(selectedArticle.url);
+      const url = selectedArticle.url;
+      if (forceHeadlessRender || isWebviewBlockedHost(url)) {
+        // 快照模式（默认）：直接用已抓取的 adapter 美化正文作"正文快照"，零渲染等待
+        // 整页模式：headless 渲染整页后在 srcDoc 显示
+        if (!forceHeadlessRender && isWebviewBlockedHost(url) && originalViewMode === "snapshot") {
+          let content = selectedArticle.content || "";
+          if (!content && selectedArticle.id) {
+            await api.fetchFullContent(selectedArticle.id);
+            const updated = await api.getArticle(selectedArticle.id);
+            content = updated?.content || "";
+          }
+          if (content) {
+            setRenderedHtml(null);
+            setOriginalSnapshot(buildSnapshotHtml(content));
+            setOpenOriginal(true);
+            setFileView(null);
+            setStatus("");
+            setLoadingOriginal(false);
+            return;
+          }
+          // 无正文可作快照 → 回退整页渲染（若失败再提示浏览器打开）
+        }
+        try {
+          const rendered = await api.fetchPageRendered(url);
+          setRenderedHtml(rendered.content);
+          setOriginalSnapshot(null);
+          setOpenOriginal(true);
+          setFileView(null);
+          setStatus("");
+          setLoadingOriginal(false);
+          return;
+        } catch (e) {
+          // headless 渲染失败（无浏览器/渲染不了）→ 提示浏览器打开，避免 src=url 直连又报加载失败
+          setRenderedHtml(null);
+          setOriginalSnapshot(null);
+          setOriginalBlocked(true);
+          setOpenOriginal(true);
+          setFileView(null);
+          setLoadingOriginal(false);
+          return;
+        }
+      }
+      setRenderedHtml(null);
+      setOriginalSnapshot(null);
+      const res = await api.probeUrl(url);
       if (res.kind === "file") {
         setFileView(res);
         setOpenOriginal(false);
+    setRenderedHtml(null);
+    setOriginalSnapshot(null);
       } else {
         // 站点禁止被 iframe 内嵌（X-Frame-Options/CSP）→ 直接提示浏览器打开
         if (res.allow_embed === false) {
@@ -1422,7 +1516,8 @@ export default function App({ dark, themeMode, setThemeMode, decorations, setDec
           setOpenOriginal(true);
           setFileView(null);
         } else {
-          // 抓一次原始 HTML 检测 CF 验证页，避免 iframe 白屏无提示
+          // 抓一次原始 HTML 检测 CF 验证页，避免 iframe 白屏无提示（8s 前端超时兜底，抓不到就当可内嵌）
+          setStatus(t("status.openingOriginal"));
           try {
             const page = await api.fetchOriginalHtml(selectedArticle.url);
             const low = (page.content || "").toLowerCase();
@@ -1451,6 +1546,8 @@ export default function App({ dark, themeMode, setThemeMode, decorations, setDec
   const backToArticle = () => {
     setOpenOriginal(false);
     setFileView(null);
+    setRenderedHtml(null);
+    setOriginalSnapshot(null);
   };
 
   const wrapHtmlDoc = (bodyHtml: string) =>
@@ -1859,7 +1956,7 @@ export default function App({ dark, themeMode, setThemeMode, decorations, setDec
         <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}>
           <div style={{ padding: "6px 12px", display: "flex", gap: "8px", alignItems: "center", borderBottom: `1px solid ${tokens.colorNeutralStroke1}` }}>
             <Text size={300} style={{ color: tokens.colorNeutralForeground3 }} truncate>
-              {selectedArticle.url}
+              {renderedHtml ? selectedArticle.url : originalSnapshot ? t("reader.originalSnapshot") : selectedArticle.url}
             </Text>
             <div style={{ flex: 1 }} />
             <Button appearance="subtle" size="small" icon={<OpenRegular />} onClick={() => openUrl(selectedArticle.url!)}>
@@ -1871,8 +1968,9 @@ export default function App({ dark, themeMode, setThemeMode, decorations, setDec
           </div>
           <div style={{ flex: 1, minHeight: 0, position: "relative" }}>
             <iframe
-              sandbox="allow-scripts allow-same-origin allow-popups allow-forms allow-modals"
-              src={selectedArticle.url}
+              sandbox="allow-scripts allow-same-origin allow-popups allow-forms allow-modals allow-top-navigation-by-user-activation"
+              srcDoc={renderedHtml ?? originalSnapshot ?? undefined}
+              src={renderedHtml || originalSnapshot ? undefined : selectedArticle.url}
               title="original"
               style={{ width: "100%", height: "100%", border: "none", minHeight: 0, background: "#fff" }}
             />
@@ -1905,8 +2003,8 @@ export default function App({ dark, themeMode, setThemeMode, decorations, setDec
         </div>
       );
     }
-    // 刷新中且正看着某篇文章（正在等待内容）→ 阅读区转圈；无选中文章刷新不转圈
-    if (refreshing) {
+    // 刷新中且正在等待的正是当前选中文章 → 阅读区转圈；刷新 A 时切到 B，B 立即正常显示
+    if (refreshing && refreshingArticleIdRef.current === selectedArticleId) {
       return (
         <div className={styles.empty} style={{ flex: 1, flexDirection: "column", gap: 8 }}>
           <Spinner />
@@ -1916,19 +2014,13 @@ export default function App({ dark, themeMode, setThemeMode, decorations, setDec
         </div>
       );
     }
-    // 加载中：正在抓全文 或 正在加载图片 → 整区转圈等待，不显示半成品。
-    // 抓全文优先显示"正在加载全文"，全文就绪后才轮到图片进度。
-    if (loadingFull || imgLoading) {
-      const label = loadingFull
-        ? t("status.fetchingFull")
-        : imgLoading
-        ? `${t("status.images")}${imgStatus ? ` ${imgStatus}` : ""}`
-        : "";
+    // 加载中：正在抓全文 → 整区转圈等待；图片不再阻塞（直连秒出，防盗链图自动兜底代理）
+    if (loadingFull) {
       return (
         <div className={styles.empty} style={{ flex: 1, flexDirection: "column", gap: 8 }}>
           <Spinner />
           <Text size={300} style={{ color: tokens.colorNeutralForeground3 }}>
-            {label}
+            {t("status.fetchingFull")}
           </Text>
         </div>
       );
@@ -2000,7 +2092,7 @@ export default function App({ dark, themeMode, setThemeMode, decorations, setDec
     <div className={styles.root}>
       {/* ---------- 顶栏 ---------- */}
       {/* 自绘标题栏：JS 拖拽（data-tauri-drag-region 对按钮区无效，改用 startDragging 排除交互元素） */}
-      <div className={styles.titleBar} onMouseDown={onTitleBarMouseDown}>
+      <div className={styles.titleBar} onMouseDown={onTitleBarMouseDown} onDoubleClick={onTitleBarDoubleClick}>
         <Tooltip content={t("sidebar.all")} relationship="label">
           <Button icon={<PanelLeftRegular />} appearance="subtle" onClick={toggleSidebar} />
         </Tooltip>
@@ -2510,7 +2602,6 @@ export default function App({ dark, themeMode, setThemeMode, decorations, setDec
       {/* ---------- 底部状态栏 ---------- */}
       <div className={styles.statusBar}>
         <Text size={300} className={styles.statusText}>
-          {imgStatus ? `${t("status.images")} ${imgStatus} ` : ""}
           {status}
         </Text>
         <Badge appearance="outline" color="brand" size="small">

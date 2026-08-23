@@ -11,7 +11,7 @@ thiserror = { workspace = true }
 dirs = { workspace = true }
 chrono = { workspace = true }
 
-reqwest = { version = "0.13.4", features = ["blocking", "rustls", "gzip", "brotli", "deflate", "stream", "socks"], default-features = false }
+reqwest = { version = "0.13.4", features = ["blocking", "native-tls", "gzip", "brotli", "deflate", "stream", "socks"], default-features = false }
 feed-rs = "2.4.0"
 rusqlite = { version = "0.40.2", features = ["bundled"] }
 quick-xml = "0.41.0"
@@ -21,6 +21,7 @@ html2md = "0.2.15"
 url = "2.5.8"
 base64 = "0.22"
 tracing = "0.1"
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
 
 [dev-dependencies]
 tempfile = "3"

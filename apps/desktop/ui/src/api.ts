@@ -145,7 +145,12 @@ export const api = {
   markFolderRead: (folderId: number) => ic<void>("mark_folder_read", { folderId }),
   markAllRead: () => ic<void>("mark_all_read"),
   toggleStar: (id: number) => ic<boolean>("toggle_star", { id }),
-  fetchFullContent: (id: number) => ic<boolean>("fetch_full_content", { id }),
+  // 8s 超时：抓取进度在 UI 上有独立的 loadingFull 转圈，此处仅防止抓取挂起导致 refreshing 永久卡死
+  fetchFullContent: (id: number) =>
+    Promise.race([
+      ic<boolean>("fetch_full_content", { id }),
+      new Promise<never>((_, rej) => setTimeout(() => rej(new Error("fetch full timeout")), 8000)),
+    ]),
 
   unreadStats: () => ic<UnreadStats>("unread_stats"),
 
@@ -167,11 +172,17 @@ export const api = {
     ic<{ name: string; version: string; tauri_version: string; license: string; homepage: string }>(
       "get_app_info"
     ),
-  fetchOriginalHtml: (url: string) => ic<PageResource>("fetch_original_html", { url }),
+  // 打开原文的 CF 预检：8s 超时兜底，避免重 JS 站抓整页 HTML 卡住打开操作
+  fetchOriginalHtml: (url: string) =>
+    Promise.race([
+      ic<PageResource>("fetch_original_html", { url }),
+      new Promise<never>((_, rej) => setTimeout(() => rej(new Error("original html timeout")), 8000)),
+    ]),
+  fetchPageRendered: (url: string) => ic<PageResource>("fetch_page_rendered", { url }),
   probeUrl: (url: string) => ic<PageResource>("probe_url", { url }),
   writeTextFile: (path: string, content: string) => ic<void>("write_text_file", { path, content }),
-  fetchImage: (url: string, referer?: string) =>
-    ic<FetchedImage>("fetch_image", { url, referer: referer ?? null }),
+  fetchImage: (url: string, referer?: string, maxWidth?: number) =>
+    ic<FetchedImage>("fetch_image", { url, referer: referer ?? null, maxWidth: maxWidth ?? null }),
   openMediaWindow: (url: string, width?: number, height?: number) =>
     ic<void>("open_media_window", { url, width: width ?? null, height: height ?? null }),
 };

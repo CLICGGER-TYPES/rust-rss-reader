@@ -457,6 +457,15 @@ async fn fetch_original_html(reader: State<'_, Reader>, url: String) -> CmdResul
         .map_err(|e| e.to_string())
 }
 
+/// headless 渲染整页（供 WebView 打不开的站显示，如强制后量子 TLS 的 status.deepseek.com）。
+#[tauri::command]
+async fn fetch_page_rendered(reader: State<'_, Reader>, url: String) -> CmdResult<rss_core::PageResource> {
+    tracing::info!("[cmd] fetch_page_rendered url={url}");
+    blocking(reader.inner().0.clone(), move |r| r.fetch_page_rendered(&url))
+        .await
+        .map_err(|e| e.to_string())
+}
+
 /// 把文本写入指定路径（用于导出 Markdown/HTML/TXT 等）。
 #[tauri::command]
 async fn write_text_file(path: String, content: String) -> CmdResult<()> {
@@ -465,15 +474,17 @@ async fn write_text_file(path: String, content: String) -> CmdResult<()> {
 
 /// 图片代理：带 Referer/UA 抓图，返回 base64，前端转 blob 渲染。
 /// `referer` 可选：文章源站 URL，供防盗链（CDN 通常校验引用页域而非图片域）。
+/// `max_width` 可选：图宽超限则压缩到该宽度（WebView 解码 4K 大图卡死，前端对超大图传 1600）。
 #[tauri::command]
 async fn fetch_image(
     reader: State<'_, Reader>,
     url: String,
     referer: Option<String>,
+    max_width: Option<u32>,
 ) -> CmdResult<rss_core::FetchedImage> {
-    tracing::info!("[cmd] fetch_image url={url} referer={referer:?}");
+    tracing::info!("[cmd] fetch_image url={url} referer={referer:?} max_width={max_width:?}");
     blocking(reader.inner().0.clone(), move |r| {
-        r.fetch_image(&url, referer.as_deref())
+        r.fetch_image(&url, referer.as_deref(), max_width)
     })
     .await
     .map_err(|e| e.to_string())
@@ -568,6 +579,7 @@ pub fn run() {
             set_data_dir,
             get_app_info,
             fetch_original_html,
+            fetch_page_rendered,
             probe_url,
             write_text_file,
             fetch_image,

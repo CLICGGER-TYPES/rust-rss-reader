@@ -5,8 +5,9 @@ import {
   DialogSurface,
   DialogBody,
 } from "@fluentui/react-components";
-import { DismissRegular, ArrowMinimizeRegular } from "@fluentui/react-icons";
+import { DismissRegular, ArrowMinimizeRegular, OpenRegular } from "@fluentui/react-icons";
 import { tokens } from "@fluentui/react-components";
+import { openUrl } from "@tauri-apps/plugin-opener";
 
 function hostOf(url: string): string {
   try {
@@ -121,12 +122,20 @@ export default function MediaDialog({ open, url, onClose, onMinimize }: MediaDia
                 <Button
                   appearance="subtle"
                   size="small"
+                  icon={<OpenRegular />}
+                  title="在浏览器打开（WebView 播放器兼容问题时使用）"
+                  onClick={() => openUrl(url)}
+                />
+                <Button
+                  appearance="subtle"
+                  size="small"
                   icon={<DismissRegular />}
                   onClick={onClose}
                 />
               </div>
               <iframe
                 sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-presentation"
+                allow="autoplay; encrypted-media; picture-in-picture; fullscreen; clipboard-write"
                 src={url}
                 title="media"
                 style={{

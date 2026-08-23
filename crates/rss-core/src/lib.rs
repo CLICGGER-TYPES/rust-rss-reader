@@ -513,7 +513,7 @@ impl RssReader {
             }
             let Some(page_url) = a.url.as_deref() else { continue };
             tracing::info!(target: "rss_core::backfill", "[backfill] article_id={} url={page_url}", a.id);
-            match fetch_full_content(client, page_url) {
+            match fetch_full_content(client, page_url, self.render_fallback_enabled()) {
                 Ok(Some(content)) => {
                     let _ = self.storage.update_article_content(a.id, &content);
                     let _ = self.storage.mark_content_fetched(a.id);
@@ -566,6 +566,15 @@ impl RssReader {
         self.storage.toggle_star(id)
     }
 
+    /// 是否启用 headless 浏览器渲染兜底（设置 headless_enabled=1；系统需有 Chromium/Edge/Firefox）。
+    fn render_fallback_enabled(&self) -> bool {
+        self.get_setting("headless_enabled")
+            .ok()
+            .flatten()
+            .map(|s| s == "1" || s == "true")
+            .unwrap_or(false)
+    }
+
     /// 为单篇文章抓取网页全文，成功返回 true。
     pub fn fetch_article_full_content(&self, id: i64) -> Result<bool> {
         let article = self
@@ -588,7 +597,7 @@ impl RssReader {
             "[fetch_article] id={id} url={page_url} use_proxy={use_proxy} feed_id={:?}",
             feed.as_ref().map(|f| f.id)
         );
-        match fetch_full_content(&client, page_url) {
+        match fetch_full_content(&client, page_url, self.render_fallback_enabled()) {
             Ok(Some(content)) => {
                 let len = content.len();
                 self.storage.update_article_content(id, &content)?;
@@ -614,6 +623,21 @@ impl RssReader {
         crate::feed::fetch_page_resource(&self.client.read().unwrap(), url)
     }
 
+    /// headless 浏览器渲染整页，返回渲染后的完整 HTML（用于 WebView 打不开的站，
+    /// 如强制后量子 TLS 的 status.deepseek.com）。剥离 <script>/<link>：iframe srcDoc 的
+    /// base 是 about:srcdoc，渲染页里的相对资源（/_next/...）会全部加载失败导致报错页。
+    pub fn fetch_page_rendered(&self, url: &str) -> Result<crate::feed::PageResource> {
+        let html = crate::fetch::render::render_dom(url)
+            .ok_or_else(|| Error::Invalid("no headless-renderable browser available (need Chromium/Edge/Firefox)".into()))?;
+        let html = strip_scripts_and_links(&html);
+        Ok(crate::feed::PageResource {
+            kind: "html".into(),
+            content_type: "text/html".into(),
+            content: html,
+            allow_embed: true,
+        })
+    }
+
     /// 轻量探测资源类型（HTML 还是文件），不抓 body。
     pub fn probe_page_resource(&self, url: &str) -> Result<crate::feed::PageResource> {
         crate::feed::probe_page_resource(&self.client.read().unwrap(), url)
@@ -621,12 +645,13 @@ impl RssReader {
 
     /// 抓取图片字节（带浏览器 UA + 智能 Referer + 磁盘缓存），供前端渲染。
     /// `referer` 为可选源站 URL（更贴合 CDN 防盗链校验）；无则回退图片 host。
-    pub fn fetch_image(&self, url: &str, referer: Option<&str>) -> Result<FetchedImage> {
+    pub fn fetch_image(&self, url: &str, referer: Option<&str>, max_width: Option<u32>) -> Result<FetchedImage> {
         crate::image::fetch_image(
             &self.client.read().unwrap(),
             &self.data_dir,
             url,
             referer,
+            max_width,
         )
     }
 
@@ -728,4 +753,37 @@ impl RssReader {
 
         opml::export_opml("rss-reader export", &groups, &ungrouped)
     }
+}
+
+/// 剥离 <script> 与 <link> 标签（保留 SSR 内容与内联 <style>），避免 iframe srcDoc
+/// 里相对资源（/_next/...）在 about:srcdoc base 下全部加载失败报错。
+fn strip_scripts_and_links(html: &str) -> String {
+    let bytes = html.as_bytes();
+    let lower = html.to_ascii_lowercase();
+    let mut out = String::with_capacity(html.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if lower[i..].starts_with("<script") {
+            let Some(gt) = lower[i..].find('>') else { break };
+            let tag_end = i + gt;
+            let is_self_closed = lower[i..tag_end].trim_end().ends_with('/');
+            i = tag_end + 1;
+            if !is_self_closed {
+                if let Some(close) = lower[i..].find("</script") {
+                    i += close + "</script".len();
+                }
+            }
+            continue;
+        }
+        if lower[i..].starts_with("<link") {
+            if let Some(gt) = lower[i..].find('>') {
+                i += gt + 1;
+                continue;
+            }
+        }
+        let cl = crate::fetch::generic::utf8_len(bytes[i]);
+        out.push_str(&html[i..i + cl]);
+        i += cl;
+    }
+    out
 }

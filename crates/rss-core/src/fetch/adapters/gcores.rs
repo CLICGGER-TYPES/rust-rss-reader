@@ -25,7 +25,9 @@ impl SiteAdapter for GcoresAdapter {
         let Some(id) = article_id(url) else {
             return Ok(None);
         };
-        let api = format!("https://www.gcores.com/gapi/v1/articles/{id}");
+        // 文章（/articles/{id}）或电台（/radios/{id}），DraftJS content 结构一致
+        let kind = if url.contains("/radios/") { "radios" } else { "articles" };
+        let api = format!("https://www.gcores.com/gapi/v1/{kind}/{id}");
         let resp = client
             .get(&api)
             .header(reqwest::header::USER_AGENT, crate::feed::BROWSER_UA)

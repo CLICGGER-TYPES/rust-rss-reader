@@ -15,6 +15,7 @@ import {
   Spinner,
   Radio,
   RadioGroup,
+  Tooltip,
   makeStyles,
   tokens,
 } from "@fluentui/react-components";
@@ -29,6 +30,7 @@ import {
   ChevronRightRegular,
   DocumentRegular,
   DocumentSaveRegular,
+  InfoRegular,
 } from "@fluentui/react-icons";
 import { api, Feed, Folder } from "./api";
 import { useI18n } from "./i18n";
@@ -213,6 +215,9 @@ export default function SettingsDialog({
 
   // 应用设置
   const [dataDir, setDataDir] = React.useState("");
+  const [headlessEnabled, setHeadlessEnabled] = React.useState(false);
+  const [forceHeadlessRender, setForceHeadlessRender] = React.useState(false);
+  const [originalViewMode, setOriginalViewMode] = React.useState<"snapshot" | "page">("snapshot");
   const [migrate, setMigrate] = React.useState(true);
   const [globalInterval, setGlobalInterval] = React.useState("30");
   const [pruneDays, setPruneDays] = React.useState("30");
@@ -243,6 +248,11 @@ export default function SettingsDialog({
     api.getSetting("refresh_interval").then((v) => v && setGlobalInterval(v));
     api.getSetting("prune_days").then((v) => v && setPruneDays(v));
     api.getSetting("prune_include_unread").then((v) => setPruneIncludeUnread(v === "1"));
+    api.getSetting("headless_enabled").then((v) => setHeadlessEnabled(v === "1" || v === "true"));
+    api.getSetting("force_headless_render").then((v) => setForceHeadlessRender(v === "1" || v === "true"));
+    api.getSetting("original_view_mode").then((v) => {
+      if (v === "page") setOriginalViewMode("page");
+    });
     reloadFeeds();
     setProxyTest(null);
     setProxyMsg("");
@@ -805,6 +815,72 @@ export default function SettingsDialog({
                     <Input type="number" min={1} value={globalInterval} onChange={(_e, d) => setGlobalInterval(d.value)} style={{ width: 120 }} />
                     <Text size={300} className={styles.desc}>{t("settings.minutes")}</Text>
                     <Button onClick={applyGlobalInterval}>{t("settings.apply")}</Button>
+                  </div>
+                </div>
+
+                <div className={`${styles.section} ${styles.card}`}>
+                  <Text weight="semibold" size={400}>{t("settings.headless")}</Text>
+                  <div className={styles.row}>
+                    <Checkbox
+                      checked={headlessEnabled}
+                      onChange={async (_e, d) => {
+                        const v = d.checked === true;
+                        setHeadlessEnabled(v);
+                        await api.setSetting("headless_enabled", v ? "1" : "0");
+                      }}
+                      label={t("settings.headlessDesc")}
+                    />
+                  </div>
+                  <div className={styles.row}>
+                    <Checkbox
+                      checked={forceHeadlessRender}
+                      onChange={async (_e, d) => {
+                        const v = d.checked === true;
+                        setForceHeadlessRender(v);
+                        await api.setSetting("force_headless_render", v ? "1" : "0");
+                      }}
+                      label={t("settings.headlessOpenOriginal")}
+                    />
+                  </div>
+                  <div className={styles.row}>
+                    <RadioGroup
+                      layout="vertical"
+                      value={originalViewMode}
+                      onChange={async (_e, d) => {
+                        const v = d.value === "page" ? "page" : "snapshot";
+                        setOriginalViewMode(v);
+                        await api.setSetting("original_view_mode", v);
+                      }}
+                    >
+                      <div className={styles.row} style={{ marginTop: 0 }}>
+                        <Text size={300} weight="semibold">{t("settings.originalViewModeTitle")}</Text>
+                        <Tooltip content={t("settings.originalViewMode")} relationship="label">
+                          <InfoRegular style={{ color: tokens.colorNeutralForeground3, cursor: "help" }} />
+                        </Tooltip>
+                      </div>
+                      <Radio
+                        value="snapshot"
+                        label={
+                          <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                            {t("settings.originalViewSnapshot")}
+                            <Tooltip content={t("settings.originalViewSnapshotDesc")} relationship="label">
+                              <InfoRegular style={{ color: tokens.colorNeutralForeground3, cursor: "help", fontSize: 12 }} />
+                            </Tooltip>
+                          </span>
+                        }
+                      />
+                      <Radio
+                        value="page"
+                        label={
+                          <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                            {t("settings.originalViewPage")}
+                            <Tooltip content={t("settings.originalViewPageDesc")} relationship="label">
+                              <InfoRegular style={{ color: tokens.colorNeutralForeground3, cursor: "help", fontSize: 12 }} />
+                            </Tooltip>
+                          </span>
+                        }
+                      />
+                    </RadioGroup>
                   </div>
                 </div>
 

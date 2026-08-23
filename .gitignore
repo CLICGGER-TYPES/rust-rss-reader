@@ -4,3 +4,5 @@ apps/desktop/ui/dist
 apps/desktop/ui/dist-mock
 *.opml
 *.log
+*.sqlite
+*.sqlite3

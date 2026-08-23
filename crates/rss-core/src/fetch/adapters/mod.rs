@@ -3,6 +3,8 @@
 //! 通用抓取流水线（`super::generic`）对绝大多数站点有效；需要特殊处理的站点
 //! 在此注册 `SiteAdapter`。新增站点 = 新建一个 adapter 文件 + `find_adapter` 加一行。
 
+pub mod deepseek_status;
+pub mod flashcat_status;
 pub mod gcores;
 
 use reqwest::blocking::Client;
@@ -25,6 +27,9 @@ pub trait SiteAdapter {
 /// 按 URL 匹配适配器；无匹配返回 `None`（走通用流水线）。
 pub fn find_adapter(url: &str) -> Option<Box<dyn SiteAdapter>> {
     let host = url::Url::parse(url).ok()?.host_str()?.to_lowercase();
+    if host.contains("status.deepseek.com") {
+        return Some(Box::new(deepseek_status::DeepseekStatusAdapter));
+    }
     if host.contains("gcores.com") {
         return Some(Box::new(gcores::GcoresAdapter));
     }
